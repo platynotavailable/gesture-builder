@@ -1,12 +1,6 @@
 import cv2
-import pygame
 from hand_tracking import HandTracker
-
-# Initialize pygame
-pygame.init()
-WIDTH, HEIGHT = 800, 600
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Gesture Block Builder")
+import time
 
 # Webcam
 cap = cv2.VideoCapture(0)
@@ -15,52 +9,51 @@ cap = cv2.VideoCapture(0)
 tracker = HandTracker()
 
 blocks = []
+last_add_time = 0
+cooldown = 0.3  # seconds to prevent spam
 
-running = True
-
-while running:
-    # Read camera
+while True:
     success, frame = cap.read()
     frame = cv2.flip(frame, 1)
 
     frame, landmarks = tracker.find_hand(frame)
 
-    cx, cy = None, None
-
     if landmarks:
-        # Use index finger tip
-        cx = int(landmarks[8].x * WIDTH)
-        cy = int(landmarks[8].y * HEIGHT)
+        h, w, _ = frame.shape
 
-        # Pinch → add block
+        # Index finger tip position
+        cx = int(landmarks[8].x * w)
+        cy = int(landmarks[8].y * h)
+
+        current_time = time.time()
+
+        # 🤏 Pinch → add block (with cooldown)
         if tracker.is_pinch(landmarks):
-            if (cx, cy) not in blocks:
+            if current_time - last_add_time > cooldown:
                 blocks.append((cx, cy))
+                last_add_time = current_time
 
-        # Fist → delete last block
+        # ✊ Fist → delete last block
         if tracker.is_fist(landmarks):
             if blocks:
                 blocks.pop()
+                time.sleep(0.2)  # prevent rapid delete
 
-    # Draw
-    screen.fill((0, 0, 0))
+        # Draw cursor
+        cv2.circle(frame, (cx, cy), 10, (255, 0, 0), -1)
 
-    for block in blocks:
-        pygame.draw.rect(screen, (0, 255, 0), (block[0], block[1], 20, 20))
+    # 🧊 Draw blocks ON CAMERA
+    for (x, y) in blocks:
+        # Draw cube-like effect (fake 3D)
+        cv2.rectangle(frame, (x, y), (x+30, y+30), (0, 255, 0), -1)
+        cv2.rectangle(frame, (x+5, y-5), (x+35, y+25), (0, 200, 0), 2)
 
-    # Show camera feed (optional overlay window)
-    cv2.imshow("Camera", frame)
+    # Show camera with blocks
+    cv2.imshow("AR Gesture Block Builder", frame)
 
-    pygame.display.flip()
-
-    # Exit controls
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            running = False
-
+    # Exit with ESC
     if cv2.waitKey(1) & 0xFF == 27:
         break
 
 cap.release()
 cv2.destroyAllWindows()
-pygame.quit()
